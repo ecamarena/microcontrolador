@@ -1326,7 +1326,7 @@ GPRS_TASK_ENUM RevisarTareasGPRS(void)
 				case 3:
                     //Espera que el modulo SIM800L responda al comando 
 					res = GSM_enviaCmdAtEsperaResp(Envio[GSM.i].atcmd, Envio[GSM.i].delay, Envio[GSM.i].str, Envio[GSM.i].nInt);
-
+                    //Determina si la respuesta es OK
 					if (res == GPRS_RESP_OK)
 					{								
 						//if (++GSM.i >= 8)
@@ -1337,6 +1337,7 @@ GPRS_TASK_ENUM RevisarTareasGPRS(void)
 							GSM.task_sm = GPRS_TASK_INI_GPRS;
 						}							
 					}
+                    //Determina si la respuesta es distinta de BUSY
 					else if(res != GPRS_RESP_BUSY)
 					{
 						if (GSM.i == 8)
@@ -1365,6 +1366,7 @@ GPRS_TASK_ENUM RevisarTareasGPRS(void)
 			switch(task_init_sm)
 			{
 				case 0:
+                    //Cargamos todas las configuraciones
 					GSM_cargaParametros(0, AT_STATUS_GPRS, 3000, atCgatt, 1);
 					GSM_cargaParametros(1, AT_ATTACH, 5000, atOk, 3);
 					GSM_cargaParametros(2, AT_CIP_SHUT, 2000, "SHUT OK", 3);	// Nos aseguramos que se inicie el PDP correctamente
@@ -1376,8 +1378,9 @@ GPRS_TASK_ENUM RevisarTareasGPRS(void)
 					task_init_sm++;
 					break;
 				case 1:
+                    //Espera que el modulo SIM800L responda al comando 
 					res = GSM_enviaCmdAtEsperaResp(Envio[GSM.i].atcmd, Envio[GSM.i].delay, Envio[GSM.i].str, Envio[GSM.i].nInt);
-					
+                    //Determina si la respuesta es OK
 					if (res == GPRS_RESP_OK)
 					{								
 						if (Envio[GSM.i].atcmd == AT_STATUS_GPRS){
@@ -1388,6 +1391,7 @@ GPRS_TASK_ENUM RevisarTareasGPRS(void)
 							task_init_sm = 3;
 						}							
 					}
+                    //Determina si la respuesta es distinta de BUSY
 					else if(res != GPRS_RESP_BUSY)
 					{
 						if (Envio[GSM.i].atcmd == AT_STATUS_GPRS)
@@ -1404,18 +1408,20 @@ GPRS_TASK_ENUM RevisarTareasGPRS(void)
 					}									
 					break;
 				case 2:
+                    //Agrega retardo 
 					if(GSM_delayTest()){												
 						task_init_sm = 1;					
 					}
 					break;		
 				case 3:
+                    //Agrega retardo 
 					if(GSM_delayTest()){
 						task_init_sm++;							
 					}
 					break;
 				case 4:
-					res = GSM_enviaCmdAtEsperaResp(AT_GET_LOCAL_IP, 1000, "", 3);
-					
+                    //Obtiene la ip local de cliente
+					res = GSM_enviaCmdAtEsperaResp(AT_GET_LOCAL_IP, 1000, "", 3);					
 					if (res == GPRS_RESP_OK)
 					{
 						task_init_sm = 0;
@@ -1444,6 +1450,7 @@ GPRS_TASK_ENUM RevisarTareasGPRS(void)
 		case GPRS_TASK_INI_CONEXION:
 			switch(task_init_sm){
 				case 0:
+                    //Confirma que exsite buena señal de antena
 					res = GSM_checkSignal(&(GSM.nivel));
 					if(res != GPRS_RESP_BUSY){
 						if(GSM.nivel < 5){						
@@ -1457,6 +1464,7 @@ GPRS_TASK_ENUM RevisarTareasGPRS(void)
 					}
 					break;
 				case 1:
+                    //Envia el comando de conexion TCP con los datos del servidor IP y PUERTO
 					res = GSM_enviaCmdAtEsperaResp(AT_START_CONN_TCP, 1000, atOk, 2);
 					if(res == GPRS_RESP_OK){
 						task_init_sm++;
@@ -1469,6 +1477,7 @@ GPRS_TASK_ENUM RevisarTareasGPRS(void)
 					}
 					break;	
 				case 2:
+                    //Espera que el modulo responda CONNECT durante 5000 milisegundos
 					res = GSM_esperaRespuestaCadena(5000, "CONNECT");
 					if(res ==  GPRS_RESP_OK){
 						task_init_sm = 0;
@@ -1491,18 +1500,18 @@ GPRS_TASK_ENUM RevisarTareasGPRS(void)
 		case GPRS_TASK_CONECTADO:
 			switch(task_init_sm){
 				case 0:
+                    //Inicializa variables
 					GSM_waitrsp_reset();
 					task_init_sm++;
 					break;
 				case 1:
+                    //Estamos esperando que el modulo se desconecte o que el
+                    //servidor cierre la conexion TCP
 					res = GSM_esperaRespuestaCadena(10000, "CLOSED");
 					if(res == GPRS_RESP_OK){
 						task_init_sm = 0;
 						GSM.task_sm = GPRS_TASK_INI_CONEXION;
 					}
-					// ANALIZAAAAAAR SI LLEGA 
-					// ANALIZAAAAAAR SI LLEGA +CPIN: NOT INSERTED
-					// ANALIZAAAAAR SI LLEGA NORMAL POWER DOWN
 					else if(res == GPRS_RESP_ERROR_NOTSTR){		// MENSAJE PUEDE SER +PDP: DEACT
 						task_init_sm = 0;
 						GSM.task_sm = GPRS_TASK_ERROR;
