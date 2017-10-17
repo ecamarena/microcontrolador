@@ -72,22 +72,40 @@
 // #pragma config statements should precede project file includes.
 // Use project enums instead of #define for ON and OFF.
 
+/*
+ * Libreria del compilador para el PIC18F46K22
+ */
 #include <xc.h>
+/*
+ * Libreria del modulo SIM800L
+ */
 #include "GSM.h"
 
+/*
+ * Funcion principal del microcontrolador
+ */
 void main(void) {
-    
+    /*
+     * Configuracion de los puertos  
+     */
     ANSELA = 0; //Puerto A como digital
     ANSELB = 0; //Puerto B como digital
     ANSELC = 0; //Puerto C como digital
     ANSELD = 0; //Puerto D como digital
-    ANSELE = 0; //Puerto E como digital
-
-    //Configuracion de oscilador interno a 64MHz
+    ANSELE = 0; //Puerto E como digital    
+    /*
+     * Configuracion de oscilador interno a 64MHz
+     */    
     OSCCONbits.IRCF = 0b111; //Selecciona frecuencia interna de 16MHz HFINTOSC    
-    
+    /*
+     * Bucle principal del microcontrolador
+     */
     while(1)
     {
+        /*
+         * Funcion que encapsula las tareas para el correcto funcionamiento
+         * del modulo SIM800L: reset, encendido, configuracion, conexion.
+         */
 	    RevisarTareasGPRS();        
     }
     
