@@ -1212,6 +1212,12 @@ void GSM_Init(void)
 	GSM_process_reset();	
 }
 
+/*
+ * Funcion RevisarTareasGPRS
+ * 
+ * Funcion que encapsula las tareas para el correcto funcionamiento
+ * del modulo SIM800L: reset, encendido, configuracion, conexion.
+ */
 
 GPRS_TASK_ENUM RevisarTareasGPRS(void)
 {	
@@ -1219,35 +1225,42 @@ GPRS_TASK_ENUM RevisarTareasGPRS(void)
 
 	static GPRS_TASK_ENUM last_task = 0xFF;
 	static char task_init_sm = 0;
-	//static GPRS_EnvioCmd Envio[8];
 	static GPRS_EnvioCmd Envio[10];
 	
-	/*const char atOk[] = "OK";
-	const char atCpms[] = "+CPMS:";
-	const char atCgatt[] = "+CGATT: 1";
-	const char atSmsRdy[] = "SMS Ready";*/
 	char atOk[] = "OK";
 	char atRdy[] = "RDY";
 	char atCpms[] = "+CPMS:";
 	char atCgatt[] = "+CGATT: 1";
 	char atSmsRdy[] = "SMS Ready";	
 	char atCnum[] = "+CNUM";
-	//char atIPR[] = "AT+IPR=115200", baud);
-			
+	
+    /*
+     * Maquina de estado principal de la gestion del modulo SIM800L
+     */
 	switch(GSM.task_sm)
 	{
+        /*
+         * En este estado se realiza la labor de resetear el microcontrolador,
+         * para asegurarnos de que siempre inicie de recién encendido.
+         */
 		case GPRS_TASK_RESET:
 			// Primero realiza un reset al modulo por si ya estaba encendido
 			switch(task_init_sm)
 			{
 				case 0:
-					DisplayGSM_Antena(0);
-				
+                    /*
+                     * Activamos el pin de reset por 1000 milisegundos
+                     */
+					DisplayGSM_Antena(0);				
 					RESET = 0;
 					GSM_delayIni(1000);
 					task_init_sm++;
 					break;
 				case 1:
+                    /*
+                     * Esperamos que termine los 1000 milisegundos para desactivar
+                     * el pin de reset.
+                     */
 					if (GSM_delayTest())
 					{
 						RESET = 1;	
@@ -1258,176 +1271,29 @@ GPRS_TASK_ENUM RevisarTareasGPRS(void)
 			}
 			break;
 			
+        /*
+         * En este estado se espera recibir la palabra RDY como confirmacion
+         * de que el modulo SIM800L ha salido del estado reset.
+         */
 		case GPRS_TASK_CHECK:
 			// Si el modulo responde con la palabra RDY es por que ya esta encendido y es el correcto Baud
-			//res = GSM_esperaRespuestaCadena(5000, "RDY");
-			//res = GSM_enviaCmdAtEsperaResp(0, 5000, "RDY", 3);
 			res = GSM_enviaCmdAtEsperaResp(0, 5000, atRdy, 3);
 			if (res == GPRS_RESP_OK){
 				task_init_sm = 0;
 				GSM.task_sm = GPRS_TASK_INI_SIM;	// = GPRS_TASK_INI_CONEXION;				
 			}
-
+            // Sino, entonces regresa al estado GPRS_TASK_PWRKEY
 			else if(res != GPRS_RESP_BUSY){			// Si el modulo respondió con timeout o no cadena, tal vez estee apagado
 				task_init_sm = 0;
 				GSM.task_sm = GPRS_TASK_PWRKEY;		
 			}
 			break;
-			
-		case GPRS_TASK_PWRKEY:						// Manda un pulso al PWRKEY del modulo GSM
-			switch(task_init_sm){
-				case 0:
-					POWERKEY = 0;
-					GSM_delayIni(1500);
-					task_init_sm++;
-					break;
-				case 1:
-					if (GSM_delayTest())
-					{
-						POWERKEY = 1;
-						GSM_process_reset();
-						task_init_sm++;
-					}
-					break;
-				case 2:				
-					//res = GSM_enviaCmdAtEsperaResp(0, 5000, "RDY", 3);
-					res = GSM_enviaCmdAtEsperaResp(0, 5000, atRdy, 3);
-					if (res == GPRS_RESP_OK){
-						task_init_sm = 0;
-						GSM.task_sm = GPRS_TASK_INI_SIM;				
-					}
-					else if(res != GPRS_RESP_BUSY){			
-						// Si el modulo no responde puede que el baud rate sea equivocado o este danado el equipo						
-						GSM.i = 0;
-						task_init_sm++;
-						
-						/*task_init_sm = 0;
-						GSM_process_reset();
-						GSM.task_sm = GPRS_TASK_ERROR;
-						GSM.error = GPRS_MOD_ERROR_NO_RESP;	//  		
-						*/												
-					}
-					break;
-				case 3:					
-					GSM_testBaud(GSM.i++);
-					GSM_process_reset();
-					task_init_sm++;										
-					break;
-				case 4:
-					res = GSM_enviaCmdAtEsperaResp(AT_OK, 750, atOk, 3);
-					if (res == GPRS_RESP_OK)
-					{
-						GSM_process_reset();
-						task_init_sm++;										
-					}
-					else if(res != GPRS_RESP_BUSY)
-					{			
-						if (GSM.i > 6)
-						{
-							task_init_sm = 0;
-							GSM_process_reset();
-							GSM.task_sm = GPRS_TASK_ERROR;
-							GSM.error = GPRS_MOD_ERROR_NO_RESP;							
-						}
-						else
-						{
-							task_init_sm--;
-						}
-					}
-					break;			
-				case 5:
-					res = GSM_enviaCmdAtEsperaResp(AT_IPR_115200, 750, atOk, 1);
-					if (res == GPRS_RESP_OK)
-					{
-						GSM_setBaud();
-						GSM_process_reset();
-						task_init_sm++;										
-					}
-					else if(res != GPRS_RESP_BUSY)
-					{	
-						task_init_sm = 0;
-						GSM_process_reset();
-						GSM.task_sm = GPRS_TASK_ERROR;
-						GSM.error = GPRS_MOD_ERROR_NO_RESP;															
-					}										
-					break;
-				case 6:
-					res = GSM_enviaCmdAtEsperaResp(AT_SAVE_CFG, 1000, atOk, 1);
-					if (res == GPRS_RESP_OK)
-					{
-						task_init_sm = 0;
-						GSM_Init();
-					}
-					else if(res != GPRS_RESP_BUSY)
-					{	
-						task_init_sm = 0;
-						GSM_process_reset();
-						GSM.task_sm = GPRS_TASK_ERROR;
-						GSM.error = GPRS_MOD_ERROR_NO_RESP;															
-					}														
-					break;
-			}
-			break;	
-			
-		case GPRS_TASK_INI_SIM:	
-			#if defined GSM_SIMULAR_CAMBIO_UART		
-			switch(task_init_sm){			
-				case 0:
-					res = GSM_enviaCmdAtEsperaResp(AT_IPR_9600, 750, atOk, 1);
-					if (res == GPRS_RESP_OK)
-					{
-						//valBRG = 416;//baudios 9600;
-						U2BRG = 416;
-						task_init_sm++;										
-					}
-					else if(res != GPRS_RESP_BUSY)
-					{	
-						task_init_sm = 0;
-						GSM_process_reset();
-						GSM.task_sm = GPRS_TASK_ERROR;
-						GSM.error = GPRS_MOD_ERROR_NO_RESP;															
-					}										
-					break;
-				case 1:
-					res = GSM_enviaCmdAtEsperaResp(AT_SAVE_CFG, 1000, atOk, 1);
-					if (res == GPRS_RESP_OK)
-					{
-						//GSM_setBaud();
-						//GSM_Init();
-						while(1)
-						{
-					        ClrWdt();
-						}
-					}
-					else if(res != GPRS_RESP_BUSY)
-					{	
-						task_init_sm = 0;
-						GSM_process_reset();
-						GSM.task_sm = GPRS_TASK_ERROR;
-						GSM.error = GPRS_MOD_ERROR_NO_RESP;															
-					}														
-					break;
-			}			
-			#else
-			res = GSM_enviaCmdAtEsperaResp(0, 5000, atSmsRdy, 5);
-			
-			if (res == GPRS_RESP_OK)
-			{
-				task_init_sm = 0;		// reinicia el maquina de estado interna
-				GSM.task_sm = GPRS_TASK_INI_GSM;	// Vamos a inicializar el GSM										
-			}
-			else if(res != GPRS_RESP_BUSY)
-			{
-				if (--GSM.i <= 0)
-				{
-					GSM.task_sm = GPRS_TASK_ERROR;
-					GSM.error = GPRS_MOD_ERROR_SIM_CARD; //GPRS_MOD_ERROR_NO_RESP;
-					//return;
-				}
-			}	
-			#endif	
-			break;
-											
+
+        /*
+         * En este estado se inicia la configuracion basica del modulo SIM800L
+         * donde se establece: no eco, modo texto del sms.
+         * Tambien se obtiene el numero de telefono del modulo SIM800L
+         */
 		case GPRS_TASK_INI_GSM:
 			switch(task_init_sm)
 			{
@@ -1437,11 +1303,13 @@ GPRS_TASK_ENUM RevisarTareasGPRS(void)
 					task_init_sm++;
 					break;
 				case 1:
+                    // Confirmamos que no tenga procesos pendiente
 					if(GSM_checkSignal(&GSM.nivel) != GPRS_RESP_BUSY){
 						task_init_sm++;
 					}
 					break;
 				case 2:
+                    //Cargamos todas las configuraciones
 					GSM_cargaParametros(0, AT_OK, 1000, atOk, 3);
 					GSM_cargaParametros(1, AT_NO_ECHO, 1000, atOk, 3);
 					GSM_cargaParametros(2, AT_NO_ERR_CODE, 1000, atOk, 3);
@@ -1456,6 +1324,7 @@ GPRS_TASK_ENUM RevisarTareasGPRS(void)
 					task_init_sm++;
 					break;
 				case 3:
+                    //Espera que el modulo SIM800L responda al comando 
 					res = GSM_enviaCmdAtEsperaResp(Envio[GSM.i].atcmd, Envio[GSM.i].delay, Envio[GSM.i].str, Envio[GSM.i].nInt);
 
 					if (res == GPRS_RESP_OK)
@@ -1487,6 +1356,11 @@ GPRS_TASK_ENUM RevisarTareasGPRS(void)
 			}				
 			break;									
 		
+        /*
+         * En este estado se inicia la configuracion de red del modulo SIM800L
+         * donde se establece: modo del gprs, modo tcp, datos del proveedor.
+         * Tambien permite obtener la IP cliente de la conexion establecida.
+         */
 		case GPRS_TASK_INI_GPRS:
 			switch(task_init_sm)
 			{
@@ -1526,8 +1400,6 @@ GPRS_TASK_ENUM RevisarTareasGPRS(void)
 						{
 							task_init_sm = 0;
 							GSM.task_sm = GPRS_TASK_RESET;
-							//GSM.task_sm = GPRS_TASK_ERROR;
-							//GSM.error = GPRS_MOD_ERROR_CONFIG;							
 						}
 					}									
 					break;
@@ -1563,6 +1435,12 @@ GPRS_TASK_ENUM RevisarTareasGPRS(void)
 			}				
 			break;
 			
+        /*
+         * En este estado iniciamos la conexion TCP del SIM800L en modo cliente
+         * con un determinado servidor. La conexion al servidor requiere de
+         * un puerto y una IP, la que puede obtnerse mediante DNS desde un URL.
+         * Se queda esperando que el modulo responda con el string "CONECTADO".
+         */
 		case GPRS_TASK_INI_CONEXION:
 			switch(task_init_sm){
 				case 0:
@@ -1603,12 +1481,13 @@ GPRS_TASK_ENUM RevisarTareasGPRS(void)
 					}
 					break;					
 			}			
-			/*
-			Consultar antena, luego intentar conectarse y si falla
-			continuar consultando antena
-			*/		
 			break;
 
+        /*
+         * En este estado mantenemos la conexion TCP de cliente SIM800L con
+         * el servidor remoto. Se queda en este estado mientras el modulo
+         * no retorne la cadena CLOSED.
+         */
 		case GPRS_TASK_CONECTADO:
 			switch(task_init_sm){
 				case 0:
@@ -1632,56 +1511,14 @@ GPRS_TASK_ENUM RevisarTareasGPRS(void)
 					break;						
 			}		
 			break;
-			
+
+        /*
+         * En este estado se gestiona el error para que se reinicie
+         * la maquina de estado
+         */
 		case GPRS_TASK_ERROR:
-			/*			
-			Consultar antena, si responde ok regresar a GPRS_TASK_INI,
-			sino mostrar mensaje error
-			*/	
-								
-			switch(task_init_sm)
-			{
-				case 0:
-					DisplayGSM_Error(GSM.error);
-					
-					if(GSM.error != GPRS_MOD_ERROR_NO_RESP && GSM.error != GPRS_MOD_ERROR_SIM_CARD && GSM.error != 0){
-						GSM_checksignal_reset();
-						task_init_sm++;
-					}	
-					else{
-						task_init_sm = 3;
-					}			
-					break;
-				case 1:
-					if(GSM_checkSignal(&GSM.nivel) != GPRS_RESP_BUSY){
-						GSM_delayIni(2000);
-						task_init_sm++;
-					}
-					break;
-				case 2:
-					if(GSM_delayTest()){											
-						task_init_sm = 1;
-					}	
-					//break;	// comentado a proposito
-				case 3:		
-					if(GSM.error == 0)
-					{
-						task_init_sm = 0;
-						GSM.task_sm = GPRS_TASK_INI_GPRS;
-					}		
-					else
-					{
-						task_init_sm = 0;
-						GSM.task_sm = GPRS_TASK_RESET;						
-					}
-					break;				
-				default:
-					task_init_sm = 0;
-					break;
-			}								
-			break;			
 		default:
-			;
+            task_init_sm = 0;
 			break;
 	}
 
